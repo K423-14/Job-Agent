@@ -1,0 +1,83 @@
+{
+  "_comment": "腾讯校招岗位配置 - join.qq.com",
+  "_version": "2.0",
+  "_created": "2026-04-03",
+  "_updated": "2026-04-04",
+
+  "site": {
+    "name": "腾讯校招",
+    "homepage": "https://join.qq.com/post.html",
+    "render_type": "spa",
+    "company": "腾讯"
+  },
+
+  "api": {
+    "list": {
+      "url": "https://join.qq.com/api/v1/position/searchPosition",
+      "method": "POST",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "Referer": "https://join.qq.com/post.html",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "Content-Type": "application/json;charset=UTF-8",
+        "Origin": "https://join.qq.com"
+      },
+      "params": {
+        "projectIdList": [],
+        "projectMappingIdList": [2, 104, 1, 14, 20, 5],
+        "keyword": "",
+        "bgList": [],
+        "positionFidList": [],
+        "recruitCityList": [],
+        "workCityList": []
+      },
+      "pagination": {
+        "page_param": "pageIndex",
+        "size_param": "pageSize",
+        "page_size": 10,
+        "start_page": 1
+      }
+    },
+    "detail": {
+      "url": "https://join.qq.com/api/v1/position/detail",
+      "method": "GET",
+      "params": {
+        "id": "{id}"
+      }
+    },
+    "fallback_playwright": true
+  },
+
+  "response_mapping": {
+    "success_flag": "status",
+    "success_value": 0,
+    "data_path": "data.positionList",
+    "total_path": "data.count",
+    "fields": {
+      "id":            "id",
+      "title":         "positionTitle",
+      "category":      "positionTitle",
+      "location":      "workCities",
+      "department":    "bgs",
+      "type":          "recruitLabelName",
+      "headcount":     "recruitNum",
+      "publish_time":  "createTime",
+      "update_time":   "updateTime",
+      "detail_url":    "https://join.qq.com/post_detail.html?id={id}"
+    }
+  },
+
+  "filters": {
+    "type": ["实习", "校招"],
+    "location": [],
+    "keyword": ""
+  },
+
+  "crawl": {
+    "interval_seconds": 3600,
+    "request_delay_ms": 1500,
+    "max_retries": 3,
+    "timeout_seconds": 30
+  }
+}

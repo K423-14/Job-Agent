@@ -1,0 +1,2 @@
+# 临时缓存目录
+# navigator_xhr_dump.json — Navigator Agent 每次运行后写入的 XHR 拦截记录，供人工检查

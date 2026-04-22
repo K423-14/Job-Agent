@@ -1,0 +1,122 @@
+"""
+qa_chain.py
+职责：RAG问答链 — 检索相关岗位 + 构造Prompt + 调用LLM生成回答。
+
+这是整个RAG系统的核心编排层。
+没有用LangChain的RetrievalQA，而是手动编排三个步骤，
+这样对每一步有更细粒度的控制（检索数量、Prompt模板、后处理）。
+"""
+import json
+from pathlib import Path
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+
+from .vector_store import search
+
+
+_LLM_CONFIG_PATH = Path(__file__).parent.parent / "configs" / "llm_config.json"
+
+# 系统提示词
+SYSTEM_PROMPT = """你是一个招聘信息助手，基于检索到的岗位数据回答用户问题
+
+规则：
+1.只根据下面提供的【检索结果】回答，不要编造不存在的岗位信息
+2.如果检索中没有相关信息，明确回答“当前数据库不存在相关岗位”
+3.回答简介有条理，列出岗位包含：岗位名称、工作地点、核心要求
+4.用户问题不是关于岗位查询的，礼貌的引导回岗位话题
+
+"""
+
+# User Prompt
+
+USER_PROMPT_TEMPLATE = """【检索结果】（共{result_count}条相关岗位）：
+{context}
+
+【用户问题】：{question}
+
+请基于以上检索结果回答用户问题
+
+"""
+
+
+def _get_chat_llm() -> ChatOpenAI:
+    """创建Chat LLM实例（用于生成回答，和Embedding模型是不同的模型）"""
+    with open(_LLM_CONFIG_PATH, encoding="utf-8") as f:
+        cfg = json.load(f)
+    return ChatOpenAI(
+        model=cfg["model"], 
+        api_key=cfg["apiKey"], 
+        base_url=cfg["apiBase"], 
+        max_completion_tokens=cfg.get("maxTokens", 4096), 
+        temperature=cfg.get("temperature", 0.1)
+    )
+
+
+def _format_docs(results: list) -> str:
+    """
+    把检索结果格式化成文本，塞进Prompt。
+    
+    results 是 [(Document, score), ...] 的列表。
+    score 是距离分数，越小越相关。
+    """
+    parts = []
+    for i, (doc, score) in enumerate(results, 1):
+        parts.append(
+            f"--- 岗位{i}（相关分数：{score:.2f}） ---\n"
+            f"{doc.page_content}"
+        )
+    return "\n\n".join(parts)
+
+
+def ask(question: str, top_k: int = 5) -> dict:
+    """
+    RAG问答主函数。三步走：
+    
+    1. Retrieve：用用户问题做语义检索，拿到最相关的top_k条岗位
+    2. Augment：把检索结果塞进Prompt模板
+    3. Generate：调用LLM，基于检索结果生成回答
+    
+    返回值包含回答文本和检索到的原始岗位（方便前端展示来源）
+    """
+    # Step 1: Retrieve（检索）
+    results = search(query=question, top_k=top_k)
+
+    if not results:
+        return {
+            "answer": "当前数据库中没有找到相关信息。",
+            "sources": [],
+        }
+
+    # Step 2: Augment（增强Prompt）
+    context = _format_docs(results)
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", SYSTEM_PROMPT), 
+            ("human", USER_PROMPT_TEMPLATE),
+        ]
+    )
+
+    messages = prompt.format_messages(
+        result_count=len(results), 
+        context=context, 
+        question=question
+    )
+
+    # Step 3: Generate（生成回答）
+    llm = _get_chat_llm()
+    response = llm.invoke(messages)
+
+    # 提取信息来源
+    sources = []
+    for (doc, score) in results:
+        sources.append({
+            "title": doc.metadata.get("title", ""),   # 没有则给空
+            "location": doc.metadata.get("location", ""), 
+            "score": round(score, 3),   # 四舍五入保留三位
+        })
+
+    return {
+        "answer": response.content, 
+        "sources": sources, 
+    }

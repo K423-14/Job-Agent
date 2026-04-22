@@ -1,0 +1,73 @@
+﻿{
+  "_comment": "通用站点配置模板 — 由 schema_extractor.py 自动生成，人工校对后放入 site_configs/",
+  "_version": "2.0",
+
+  "site": {
+    "name": "企业名称 + 校招/社招",
+    "homepage": "https://example.com/jobs",
+    "render_type": "spa",
+    "company": "企业名称"
+  },
+
+  "api": {
+    "list": {
+      "url": "https://example.com/api/jobs/list",
+      "method": "POST",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Referer": "https://example.com/jobs",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json;charset=UTF-8"
+      },
+      "params": {},
+      "pagination": {
+        "page_param": "pageNum",
+        "size_param": "pageSize",
+        "page_size": 10,
+        "start_page": 1
+      }
+    },
+    "detail": {
+      "url": "https://example.com/api/jobs/detail",
+      "method": "GET",
+      "params": {
+        "id": "{id}"
+      }
+    },
+    "fallback_playwright": true
+  },
+
+  "response_mapping": {
+    "success_flag": "code",
+    "success_value": 0,
+    "data_path": "data.list",
+    "total_path": "data.total",
+    "fields": {
+      "id":            "id",
+      "title":         "title",
+      "category":      "category",
+      "location":      "location",
+      "department":    "department",
+      "type":          "type",
+      "headcount":     "headcount",
+      "publish_time":  "publishTime",
+      "update_time":   "updateTime",
+      "detail_url":    "https://example.com/jobs/{id}",
+      "description":   "description",
+      "requirements":  "positionDemand"
+    }
+  },
+
+  "filters": {
+    "type": [],
+    "location": [],
+    "keyword": ""
+  },
+
+  "crawl": {
+    "interval_seconds": 3600,
+    "request_delay_ms": 1500,
+    "max_retries": 3,
+    "timeout_seconds": 30
+  }
+}

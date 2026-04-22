@@ -1,0 +1,16 @@
+AI超级智能体(AIAgent项目)
+在线访问:codefather.cn GitHub开源:github.com/liyupi/yu-ai-agent
+项目介绍:基于Spring Boot3 + SpringAI +RAG +工具调用+ MCP的企业级 AI智能体。支持多轮对话、记忆持久化、RAG知识库检索，基于ReAct 模式能够自主思考并调用工具完成复杂任务，如利用联网搜索、资源下载、PDF生成工具制定计划并生成文档。主要工作:
+1.利用Spring AI框架接入通义、Olama等5种AI大模型，封装统一调用接口实现灵活切换，通过Ollama本地部署处理简单对话,API调用成本降低60%
+2.通过 SpringAI的ChatMemory + Advisor实现多轮对话记忆，并自实现了基于MysQL +Redis +Kryo高性能序列化的记忆持久化方案，服务重启后对话上下文恢复率达99%以上
+3.基于SpringAI构建完整的RAG知识库,实现文档ETL处理、PGvector向量存储、自动元信息标注、多查询扩展和查询重写，知识问答准确率相比纯大模型提升45%
+4.利用SpringAI的@Tool注解实现了联网搜索、网页抓取、PDF生成、资源下载等6种工具调用，并基于单例模式实现集中式工具注册管理;通过TooIContext上下文传递用户身份信息，结合参数校验防止工具调用幻觉导致的无效执行5.利用SpringAI开发了图片搜索MCP服务，实现Stdio和SSE双传输模式并以Serverless 方式部署，便于其他AI项目接入6.参考OpenManus实现了支持 Human-in-the-Loop的分层智能体架构，并通过步骤限制、状态管理和死循环检测保障稳定运行7.使用SseEmitter +CompletableFuture实现SSE流式AI接口，将推理任务异步化，实时输出智能体思考和执行过程，用户等待感知时间减少80%;并通过自定义SSE数据封装格式，解决流式传输中换行符和特殊字符丢失问题
+
+AI热点监控工具(AI应用开发项目)
+在线访问:codefather.cn GitHub 开源:github.com/liyupi/yupi-hot-monitor项目介绍:基于Express5+React19 +OpenRouter + Socket.io的AI驱动热点监控工具。支持多数据源聚合采集、AI内容审核、WebSocket实时推送,并将热点监控能力封装为Agent Skills,支持在Cursor、GitHub Copilot等多种AI编程工具中复用。
+主要工作:
+1.使用GitHubCopilot + MCP +Agent Skills进行AI辅助开发,遵循企业级AI工程流程,通过Git保障每个迭代的可回滚性,项目中90%以上的代码由AI生成,大幅提高开发效率
+2.基于Axios +Cheerio实现了Bing、HackerNews、B站等8+搜索引擎的爬虫采集,同时通过第三方API 对接Twitter高级搜索,经人工标注样本对比验证,信息覆盖面相比单一来源提升5倍以上
+3.通过OpenRouter接入AI大模型,设计了结构化分析Prompt,对采集内容进行真实性验证、相关性评分、重要性分级和智能摘要生成,经人工标注数据对比测试,AI过滤准确率达90%以上
+4.利用AI大模型实现查询扩展,将用户输入的关键词自动扩展为5~15个语义变体以提升搜索召回率,信息召回率提升300%以上;同时通过本地缓存机制避免重复调用,节省AI调用成本
+5.基于Socket.io实现了事件驱动的关键词订阅机制,当后台采集到新热点时实时推送给已订阅的客户端,实现毫秒级通知6.利用Skill Creator将热点监控能力封装为标准化的Agent Skills包，实现和10+主流AI工具的集成，无需后端服务即可开箱使用

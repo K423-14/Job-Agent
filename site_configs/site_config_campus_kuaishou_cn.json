@@ -1,0 +1,74 @@
+{
+  "site": {
+    "name": "快手 校招",
+    "homepage": "https://campus.kuaishou.cn/recruit/campus/e/#/campus/jobs?positionNatureCode=intern",
+    "render_type": "spa",
+    "company": "快手"
+  },
+  "api": {
+    "list": {
+      "url": "https://campus.kuaishou.cn/recruit/campus/e/api/v1/open/positions/simple",
+      "method": "POST",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Referer": "https://campus.kuaishou.cn/recruit/campus/e/#/campus/jobs?positionNatureCode=intern",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json;charset=UTF-8"
+      },
+      "params": {
+        "recruitSubProjectCodes": [
+          "20261749721165",
+          "20271772783534"
+        ],
+        "pageSize": 10,
+        "pageNum": 1,
+        "positionNatureCode": "intern"
+      },
+      "pagination": {
+        "page_param": "pageNum",
+        "size_param": "pageSize",
+        "page_size": 10,
+        "start_page": 1
+      }
+    },
+    "detail": {
+      "url": "https://campus.kuaishou.cn/recruit/campus/e/api/v1/open/positions/detail",
+      "method": "GET",
+      "params": {
+        "id": "{id}"
+      }
+    },
+    "fallback_playwright": true
+  },
+  "response_mapping": {
+    "success_flag": "code",
+    "success_value": 0,
+    "data_path": "result.list",
+    "total_path": "result.total",
+    "fields": {
+      "id": "id",
+      "title": "name",
+      "category": "positionCategoryCode",
+      "location": "workLocationDicts[].name",
+      "department": "departmentName",
+      "type": "positionNatureCode",
+      "headcount": "recruitNumber",
+      "publish_time": "releaseTime",
+      "update_time": "updateTime",
+      "detail_url": "https://campus.kuaishou.cn/recruit/campus/e/#/campus/jobs/detail?code={{code}}",
+      "description": "description",
+      "requirements": "positionDemand"
+    }
+  },
+  "filters": {
+    "type": [],
+    "location": [],
+    "keyword": ""
+  },
+  "crawl": {
+    "interval_seconds": 3600,
+    "request_delay_ms": 1500,
+    "max_retries": 3,
+    "timeout_seconds": 30
+  }
+}

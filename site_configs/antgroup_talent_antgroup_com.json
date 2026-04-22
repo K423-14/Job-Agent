@@ -1,0 +1,81 @@
+{
+  "_comment": "蚂蚁集团校招岗位配置 - talent.antgroup.com",
+  "_version": "2.0",
+  "_created": "2026-04-03",
+  "_updated": "2026-04-04",
+
+  "site": {
+    "name": "蚂蚁集团校招",
+    "homepage": "https://talent.antgroup.com/campus-full-list",
+    "render_type": "spa",
+    "company": "蚂蚁集团"
+  },
+  "api": {
+    "list": {
+      "url": "https://hrcareersweb.antgroup.com/api/campus/position/search",
+      "method": "POST",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "Referer": "https://talent.antgroup.com/campus-full-list",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "Content-Type": "application/json;charset=UTF-8",
+        "Origin": "https://talent.antgroup.com"
+      },
+      "params": {
+        "channel": "campus_group_official_site",
+        "language": "zh",
+        "regions": "",
+        "subCategories": "",
+        "bgCode": "",
+        "pageIndex": 1,
+        "pageSize": 10,
+        "recruitType": [],
+        "batchIds": []
+      },
+      "pagination": {
+        "page_param": "pageIndex",
+        "size_param": "pageSize",
+        "page_size": 10,
+        "start_page": 1
+      }
+    },
+    "detail": {
+      "url": "",
+      "method": "GET",
+      "params": {
+        "id": "{id}"
+      }
+    },
+    "fallback_playwright": true
+  },
+  "response_mapping": {
+    "success_flag": "success",
+    "success_value": true,
+    "data_path": "content",
+    "total_path": "totalCount",
+    "fields": {
+      "id": "id",
+      "title": "name",
+      "category": "categoryName",
+      "location": "workLocations",
+      "department": "department",
+      "type": "batchTypeDesc",
+      "headcount": "",
+      "publish_time": "publishTime",
+      "update_time": "",
+      "detail_url": ""
+    }
+  },
+  "filters": {
+    "type": ["实习生"],
+    "location": [],
+    "keyword": ""
+  },
+  "crawl": {
+    "interval_seconds": 3600,
+    "request_delay_ms": 1500,
+    "max_retries": 3,
+    "timeout_seconds": 30
+  }
+}

@@ -110,6 +110,7 @@ class NavigatorAgent:
         self.homepage = homepage
         self.xhr_log: list[XHRCapture] = []
         self._failed_indices: set[int] = set()   # 验证失败过的 xhr_index
+        self._element_handles: list = []          # index → ElementHandle
         self._prompt = _load_prompt()
 
     # ── 响应拦截 ──────────────────────────────────────────────────────
@@ -149,12 +150,60 @@ class NavigatorAgent:
         html = re.sub(r"<[^>]+>", " ", html)
         return re.sub(r"\s+", " ", html).strip()[:max_len]
 
+    # ── 可交互元素快照 ────────────────────────────────────────────────
+
+    _JOB_KEYWORDS = (
+        "招聘", "职位", "岗位", "实习", "校园", "社会", "加入", "投递", "应聘", "求职",
+        "job", "career", "position", "intern", "recruit", "apply", "campus", "talent",
+        "hire", "opportunity", "more", "search", "filter", "查看更多", "筛选",
+    )
+
+    def _snapshot_elements(self, page, max_elements: int = 10) -> str:
+        """提取与招聘相关的可交互元素，分配 index，存 handle 供 click 使用。"""
+        self._element_handles.clear()
+        rows = []
+        try:
+            elements = page.query_selector_all("a[href], button, [role=button], [role=tab]")
+            for el in elements:
+                if len(self._element_handles) >= max_elements:
+                    break
+                try:
+                    text = (el.inner_text() or "").strip().replace("\n", " ")[:40]
+                    if not text:
+                        continue
+                    text_lower = text.lower()
+                    if not any(kw in text_lower for kw in self._JOB_KEYWORDS):
+                        continue
+                    tag = el.evaluate("e => e.tagName.toLowerCase()")
+                    href = el.get_attribute("href") or ""
+                    idx = len(self._element_handles)
+                    self._element_handles.append(el)
+                    hint = f"[{idx}] <{tag}> {text}"
+                    if href:
+                        hint += f" → {href[:60]}"
+                    rows.append(hint)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return "\n".join(rows) if rows else "（无匹配元素）"
+
     # ── Think (流式输出) ──────────────────────────────────────────────
 
+    _TOP_XHR = 8  # 最多送给 LLM 的 XHR 数量
+
     def _think(self, page) -> dict:
+        # 预评分，只把最可能是岗位数据的 Top N 送给 LLM
+        scored = sorted(
+            ((i, x, _score_job_response(x.response_body)) for i, x in enumerate(self.xhr_log)),
+            key=lambda t: t[2], reverse=True,
+        )[:self._TOP_XHR]
+
         summaries = []
-        for i, x in enumerate(self.xhr_log):
+        for i, x, score in scored:
             s = x.to_summary()
+            s["xhr_index"] = i          # 保留原始下标，LLM 用此索引回传
+            s["pre_score"] = score
             if i in self._failed_indices:
                 s["_verify_failed"] = True
             summaries.append(s)
@@ -166,6 +215,7 @@ class NavigatorAgent:
             xhr_count=len(self.xhr_log),
             xhr_list=json.dumps(summaries, ensure_ascii=False, indent=2)
                      if summaries else "（暂无）",
+            elements=self._snapshot_elements(page),
         )
 
         llm = get_llm(streaming=True, read_timeout=45.0)
@@ -336,11 +386,15 @@ class NavigatorAgent:
                             console.print(f"  [yellow]跳转失败: {e}[/yellow]")
 
                 elif action == "click":
-                    selector = decision.get("selector", "")
-                    if selector:
-                        console.print(f"  → 点击: {selector}")
+                    idx = decision.get("element_index", -1)
+                    handle = (self._element_handles[idx]
+                              if isinstance(idx, int) and 0 <= idx < len(self._element_handles)
+                              else None)
+                    if handle:
+                        console.print(f"  → 点击元素 [{idx}]")
                         try:
-                            page.click(selector, timeout=5000)
+                            handle.scroll_into_view_if_needed()
+                            handle.click()
                             page.wait_for_load_state("networkidle", timeout=15000)
                             page.wait_for_timeout(1500)
                         except Exception as e:

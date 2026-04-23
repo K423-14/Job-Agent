@@ -10,6 +10,9 @@
 - 标题: {page_title}
 - 正文摘要: {page_text}
 
+页面可交互元素（格式：[index] <tag> 文本 → href）:
+{elements}
+
 已捕获 XHR/Fetch 响应共 {xhr_count} 条:
 {xhr_list}
 
@@ -26,8 +29,8 @@
   {{"action": "scroll"}}
 - 若需要跳转到招聘列表页，返回:
   {{"action": "goto", "url": "https://example.com/jobs"}}
-- 若需要点击页面某元素才能触发 API，返回:
-  {{"action": "click", "selector": "a.jobs-link"}}
+- 若需要点击页面某元素才能触发 API，从上方「可交互元素」列表中选择 index，返回:
+  {{"action": "click", "element_index": 2}}
 - 若已尝试多次仍无法找到，返回:
   {{"action": "give_up"}}
 

@@ -12,7 +12,11 @@ from pathlib import Path
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 
-from .vector_store import search, filtered_search
+from .vector_store import search
+from .hybrid_retriever import hybrid_search
+# 以下两路暂时不用（Multi-Query + HyDE + Rerank 全管道，消融实验显示在当前小语料下效果反而下降）
+# from .reranker import rerank
+# from .query_expansion import multi_query, hyde
 
 
 _LLM_CONFIG_PATH = Path(__file__).parent.parent / "configs" / "llm_config.json"
@@ -60,16 +64,23 @@ USER_PROMPT_TEMPLATE = """【检索结果】（共{result_count}条相关岗位�
 """
 
 
-def _get_chat_llm() -> ChatOpenAI:
-    """创建Chat LLM实例（用于生成回答，和Embedding模型是不同的模型）"""
+def _get_chat_llm(
+    temperature: float | None = None,
+    json_mode: bool = False,
+    use_light: bool = False,
+) -> ChatOpenAI:
+    """创建Chat LLM实例。use_light=True 时使用 lightModel（免费轻量模型）。"""
     with open(_LLM_CONFIG_PATH, encoding="utf-8") as f:
         cfg = json.load(f)
+    model = cfg.get("lightModel", cfg["model"]) if use_light else cfg["model"]
+    model_kwargs = {"response_format": {"type": "json_object"}} if json_mode else {}
     return ChatOpenAI(
-        model=cfg["model"], 
-        api_key=cfg["apiKey"], 
-        base_url=cfg["apiBase"], 
-        max_completion_tokens=cfg.get("maxTokens", 4096), 
-        temperature=cfg.get("temperature", 0.1)
+        model=model,
+        api_key=cfg["apiKey"],
+        base_url=cfg["apiBase"],
+        max_completion_tokens=cfg.get("maxTokens", 4096),
+        temperature=temperature if temperature is not None else cfg.get("temperature", 0.1),
+        model_kwargs=model_kwargs,
     )
 
 
@@ -82,9 +93,9 @@ def _parse_query(question: str) -> dict:
     - 属于Agent的"思考"环节——LLM负责理解，工具负责执行
     - 如果解析失败，fallback到原始问题直接检索（容错设计）
     """
-    llm = _get_chat_llm()
+    llm = _get_chat_llm(temperature=0, json_mode=True, use_light=True)
     prompt = ChatPromptTemplate.from_messages([
-        ("system", QUERY_UNDERSTANDING_PROMPT), 
+        ("system", QUERY_UNDERSTANDING_PROMPT),
         ("human", "{question}"),
     ])
 
@@ -92,13 +103,7 @@ def _parse_query(question: str) -> dict:
     response = llm.invoke(messages)
 
     try:
-        # 提取JSON
-        content = response.content.strip()
-        if content.startswith("```"):
-            content = content.split("```")[1]
-            if content.startswith("json"):
-                content = content[4:]
-        parsed = json.loads(content)
+        parsed = json.loads(response.content.strip())
         return {
             "location": parsed.get("location"), 
             "keywords": parsed.get("keywords", []), 
@@ -153,40 +158,42 @@ def ask(question: str, top_k: int = 5) -> dict:
     # 原因：metadata的where不支持$contains，而location字段是自由文本（"北京, 深圳"）
     # where_document 是在 page_content 里做子串匹配
 
+    # 构造 location 过滤条件传给 vector 路（BM25 路不需要，天然包含关键词）
     conditions = []
-
     if parsed["location"]:
         conditions.append({"$contains": parsed["location"]})
-
-    # 如果解析出关键词，加metadata过滤
     if parsed["keywords"]:
         for kw in parsed["keywords"]:
             conditions.append({"$contains": kw})
-
-    # 多个条件用$and组合
-    where_document = None
-    if len(conditions) == 1:
-        where_document = conditions[0]
-    else:
-        where_document = {"$and": conditions}
-
-    # 先尝试带过滤检索
-    results = filtered_search(
-        query=parsed["raw_query"], 
-        top_k=top_k, 
-        where_document=where_document
+    where_document = (
+        conditions[0] if len(conditions) == 1
+        else {"$and": conditions} if conditions
+        else None
     )
 
-    # 如果过滤后结果太少，fallback到纯语义检索
-    if len(results) <= 0:
-        print("[Fallback] 过滤结果太少，回退到纯语义检索")
-        results = search(query=question, top_k=top_k)
+    # Hybrid 召回：BM25 + Vector 双路，RRF 融合（消融实验 B 方案，Hit Rate@5=100%，MRR=0.981）
+    results = hybrid_search(
+        query=parsed["raw_query"],
+        top_k=top_k,
+        recall_k=20,
+        where_document=where_document,
+    )
+
+    # 以下为 Full Pipeline 扩展路（暂时不用，消融实验显示在当前语料规模下反而降低排名质量）
+    # mqs = multi_query(question)
+    # hyde_doc = hyde(question)
+    # print(f"[Query扩展] multi_query={mqs}, hyde={'有' if hyde_doc else '无'}")
+    # candidates = hybrid_search(
+    #     query=parsed["raw_query"],
+    #     top_k=20,
+    #     recall_k=20,
+    #     where_document=where_document,
+    #     extra_vector_queries=mqs + ([hyde_doc] if hyde_doc else []),
+    # )
+    # results = rerank(question, candidates, top_k=top_k)
 
     if not results:
-        return {
-            "answer": "当前数据库中没有找到相关信息。",
-            "sources": [],
-        }
+        return {"answer": "当前数据库中没有找到相关信息。", "sources": []}
 
     # Step 2: Augment（增强Prompt）
     context = _format_docs(results)

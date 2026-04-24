@@ -59,7 +59,7 @@ class SchemaExtractorAgent:
             template_json=template_str,
         )
 
-        llm = get_llm(streaming=True, read_timeout=60.0)
+        llm = get_llm(streaming=True, read_timeout=60.0, temperature=0, json_mode=True)
         chunks: list[str] = []
         stream_exc: list[Exception] = []
         WALL_TIMEOUT = 90  # 整体硬超时（秒），Ctrl+C 后最多等这么久

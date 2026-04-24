@@ -218,7 +218,7 @@ class NavigatorAgent:
             elements=self._snapshot_elements(page),
         )
 
-        llm = get_llm(streaming=True, read_timeout=45.0)
+        llm = get_llm(streaming=True, read_timeout=45.0, temperature=0, json_mode=True)
         chunks: list[str] = []
         exc_holder: list[Exception] = []
 

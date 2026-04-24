@@ -3,6 +3,7 @@
   "apiKey": "fe027b27cbd24501884c77f3e3790656.T2UNH0FwQKbAj1cg",
   "apiBase": "https://open.bigmodel.cn/api/paas/v4/",
   "model": "glm-4.5-air",
+  "lightModel": "glm-4-flash",
   "maxTokens": 8192,
   "contextWindowTokens": 65536,
   "temperature": 0.1,

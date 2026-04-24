@@ -94,6 +94,17 @@ def load_vector_store() -> Chroma:
     )
 
 
+def load_all_docs() -> list:
+    """从 ChromaDB 拉取全量文档，供 BM25 建内存索引用。"""
+    store = load_vector_store()
+    result = store.get(include=["documents", "metadatas"])
+    docs = []
+    from langchain_core.documents import Document
+    for content, meta in zip(result["documents"], result["metadatas"]):
+        docs.append(Document(page_content=content, metadata=meta or {}))
+    return docs
+
+
 def search(query: str, top_k: int = 5) -> list:
     """
     语义检索：根据用户问题，返回最相似的top_k条岗位。

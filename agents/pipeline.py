@@ -248,21 +248,28 @@ def _simple_map(raw_item: dict, fields: dict, config: dict) -> dict:
                 val = ", ".join(str(v) for v in val)
             job[key] = val if val is not None else ""
 
-    # 指纹去重用
-    raw = f"{job.get('id', '')}{job.get('title', '')}{job.get('location', '')}"
-    job["fingerprint"] = hashlib.md5(raw.encode()).hexdigest()
+    # fingerprint 仅基于岗位ID，content_hash 覆盖所有内容字段用于变更检测
+    job["fingerprint"] = hashlib.md5(str(job.get('id', '')).encode()).hexdigest()
+    stable = {k: v for k, v in job.items()
+              if k not in ('fingerprint', 'content_hash', 'first_seen')}
+    job["content_hash"] = hashlib.md5(
+        json.dumps(stable, ensure_ascii=False, sort_keys=True).encode()
+    ).hexdigest()
     return job
 
 
 def _run_indexer(json_path: str) -> int:
     """
-    把爬到的岗位数据向量化入库到ChromaDB。
-    复用 rag 模块的现有逻辑。
+    把爬到的岗位数据增量更新到 ChromaDB。
     """
     sys.path.insert(0, str(ROOT_DIR))
     from rag.job_loader import load_jobs
-    from rag.vector_store import build_vector_store
+    from rag.vector_store import upsert_jobs
 
     docs = load_jobs(json_path)
-    build_vector_store(docs)
+    stats = upsert_jobs(docs)
+    console.print(
+        f"[cyan]新增 {stats['added']}，更新 {stats['updated']}，"
+        f"删除(下架) {stats['deleted']}，跳过 {stats['skipped']}[/cyan]"
+    )
     return len(docs)

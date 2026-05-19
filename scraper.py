@@ -52,9 +52,17 @@ FILTERS   = CONFIG["filters"]
 # ─────────────────────────── 工具函数 ───────────────────────────
 
 def job_fingerprint(job: dict) -> str:
-    """生成岗位唯一指纹，用于去重"""
-    raw = f"{job.get('id', '')}{job.get('title', '')}{job.get('location', '')}"
-    return hashlib.md5(raw.encode()).hexdigest()
+    """生成岗位唯一指纹，仅基于岗位ID，确保改名/换地不产生重复记录"""
+    return hashlib.md5(str(job.get('id', '')).encode()).hexdigest()
+
+
+def job_content_hash(job: dict) -> str:
+    """生成内容哈希，用于检测岗位信息是否发生变更"""
+    stable = {k: v for k, v in job.items()
+              if k not in ('fingerprint', 'content_hash', 'first_seen')}
+    return hashlib.md5(
+        json.dumps(stable, ensure_ascii=False, sort_keys=True).encode()
+    ).hexdigest()
 
 
 def extract_field(raw: dict, path: str):
@@ -121,6 +129,7 @@ def map_job(raw_item: dict) -> dict:
         job["first_seen"] = job["publish_time"]
 
     job["fingerprint"] = job_fingerprint(job)
+    job["content_hash"] = job_content_hash(job)
     return job
 
 

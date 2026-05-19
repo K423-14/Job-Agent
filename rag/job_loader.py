@@ -2,6 +2,7 @@
 job_loader.py
 职责：读取 jobs.json，把每条岗位转成 LangChain Document。
 """
+import hashlib
 import json
 from pathlib import Path
 from langchain_core.documents import Document
@@ -35,6 +36,14 @@ def load_jobs(json_path: str | None = None) -> list[Document]:
         )
 
         # --- metadata：不参与Embedding，但可以用来过滤 ---
+        # fingerprint 仅基于岗位ID，改名/换地不会产生重复主键
+        fingerprint = (
+            job.get("fingerprint")
+            or hashlib.md5(str(job.get("id", "")).encode()).hexdigest()
+        )
+        # content_hash 用于检测内容变更；优先取 scraper 已算好的值
+        content_hash = job.get("content_hash") or hashlib.md5(text.encode()).hexdigest()
+
         metadata = {
             "id": job.get("id"),
             "title": job.get("title", ""),
@@ -42,7 +51,9 @@ def load_jobs(json_path: str | None = None) -> list[Document]:
             "type": job.get("type", ""),
             "publish_time": job.get("publish_time", ""),
             "source": "kuaishou",
-            "fingerprint": job.get("fingerprint", str(job.get("id", ""))),  # 去重用
+            "fingerprint": fingerprint,
+            "content_hash": content_hash,
+            "missing_count": 0,
         }
 
         docs.append(Document(page_content=text, metadata=metadata))

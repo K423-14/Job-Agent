@@ -31,50 +31,104 @@ def _get_embedding_model() -> OpenAIEmbeddings:
         base_url=cfg["apiBase"],
     )
 
-def build_vector_store(docs: list) -> Chroma:
+def upsert_jobs(docs: list, missing_threshold: int = 2) -> dict:
     """
-    把Document列表向量化后存入ChromaDB。
-    
-    这一步做了两件事：
-    1. 调用Embedding模型，把每个doc的page_content变成向量
-    2. 把向量+原文+metadata一起存到ChromaDB（持久化到磁盘）
-    
-    面试要点：
-    - 这是"离线索引"阶段，只需要跑一次（或者数据更新时重跑）
-    - 类比搜索引擎：这一步相当于"建索引"
-    - OpenAI API 限制：一次最多64条，需要分批处理
+    增量更新向量数据库。
+
+    策略：
+    1. 以 fingerprint（岗位ID的MD5）作为 ChromaDB 文档主键
+    2. 对比 content_hash：内容变化则删旧插新（重新Embedding）
+    3. 本次未出现的岗位累加 missing_count，连续 missing_threshold 次删除
+
+    返回统计：{"added": int, "updated": int, "deleted": int, "skipped": int}
     """
-    embedding = _get_embedding_model()
-    
-    # OpenAI embeddings API 一次最多处理 64 条
     BATCH_SIZE = 64
-    vector_store = None
-    
-    for i in range(0, len(docs), BATCH_SIZE):
-        batch = docs[i:i+BATCH_SIZE]
-        batch_num = i // BATCH_SIZE + 1
-        
-        print(f"处理第 {batch_num} 批（{len(batch)} 条）...")
+    embedding = _get_embedding_model()
+    store = Chroma(
+        persist_directory=CHROMA_DIR,
+        embedding_function=embedding,
+        collection_name="jobs"
+    )
 
-        # 用fingerprint作为文档ID，ChromaDB会按ID去重（相同ID不会重复插入）
-        batch_ids = [doc.metadata.get("fingerprint", str(i + idx))
-                     for idx, doc in enumerate(batch)]
-        
-        if vector_store is None:
-            # 第一批：创建新的vector store
-            vector_store = Chroma.from_documents(
-                documents=batch, 
-                embedding=embedding, 
-                persist_directory=CHROMA_DIR, 
-                collection_name="jobs", 
-                ids=batch_ids
-            )
+    # 1. 拉取库内全量 metadata（不需要向量，省开销）
+    existing_raw = store.get(include=["metadatas"])
+    existing = {
+        chroma_id: (meta or {})
+        for chroma_id, meta in zip(
+            existing_raw.get("ids", []),
+            existing_raw.get("metadatas") or []
+        )
+    }
+
+    # 2. 遍历本次爬取，分类
+    current_fps: set[str] = set()
+    to_add_docs: list = []
+    to_add_ids: list[str] = []
+    to_delete_fps: list[str] = []  # 内容有变，需先删后加
+
+    for doc in docs:
+        fp = doc.metadata.get("fingerprint", "")
+        if not fp:
+            continue
+        current_fps.add(fp)
+        new_hash = doc.metadata.get("content_hash", "")
+
+        if fp not in existing:
+            doc.metadata["missing_count"] = 0
+            to_add_docs.append(doc)
+            to_add_ids.append(fp)
+        elif existing[fp].get("content_hash", "") != new_hash:
+            # 内容变更：删旧重建
+            to_delete_fps.append(fp)
+            doc.metadata["missing_count"] = 0
+            to_add_docs.append(doc)
+            to_add_ids.append(fp)
         else:
-            # 后续批次：添加到已有的vector store
-            vector_store.add_documents(documents=batch)
+            # 内容未变；若之前被标记缺失则重置计数
+            if int(existing[fp].get("missing_count", 0)) > 0:
+                updated_meta = dict(existing[fp])
+                updated_meta["missing_count"] = 0
+                # 仅更新 metadata，不重新 Embedding
+                store._collection.update(ids=[fp], metadatas=[updated_meta])
 
-    print(f"已索引 {len(docs)} 条岗位到 ChromaDB，路径: {CHROMA_DIR}")
-    return vector_store
+    # 3. 删除内容已变的旧文档
+    if to_delete_fps:
+        store.delete(ids=to_delete_fps)
+
+    # 4. 批量插入新/更新的文档
+    for i in range(0, len(to_add_docs), BATCH_SIZE):
+        batch_docs = to_add_docs[i:i + BATCH_SIZE]
+        batch_ids = to_add_ids[i:i + BATCH_SIZE]
+        print(f"  写入第 {i // BATCH_SIZE + 1} 批（{len(batch_docs)} 条）...")
+        store.add_documents(documents=batch_docs, ids=batch_ids)
+
+    added = sum(1 for fp in to_add_ids if fp not in existing)
+    updated = len(to_delete_fps)
+    skipped = len(docs) - len(to_add_docs)
+
+    # 5. 处理本次未出现的岗位（疑似下架）
+    absent_fps = set(existing.keys()) - current_fps
+    deleted = 0
+    for fp in absent_fps:
+        meta = existing[fp]
+        new_missing = int(meta.get("missing_count", 0)) + 1
+        if new_missing >= missing_threshold:
+            store.delete(ids=[fp])
+            deleted += 1
+            print(f"  删除下架岗位（连续 {new_missing} 次未见）: {meta.get('title', fp)}")
+        else:
+            updated_meta = dict(meta)
+            updated_meta["missing_count"] = new_missing
+            store._collection.update(ids=[fp], metadatas=[updated_meta])
+
+    stats = {"added": added, "updated": updated, "deleted": deleted, "skipped": skipped}
+    print(f"向量库更新完成: 新增 {added}，更新 {updated}，删除(下架) {deleted}，跳过 {skipped}")
+    return stats
+
+
+def build_vector_store(docs: list) -> dict:
+    """向后兼容入口，内部调用 upsert_jobs。"""
+    return upsert_jobs(docs)
 
 
 def load_vector_store() -> Chroma:
